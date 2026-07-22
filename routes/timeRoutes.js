@@ -1,4 +1,4 @@
-//this file connects route paths to thoe controller functions in timeController.js
+//this file connects route paths to thIe controller functions in timeController.js
 
 const express = require("express");
 const timeController = require("../controllers/timeController");
