@@ -1,69 +1,96 @@
+//week4
+const crypto = require("crypto");
+const util = require("util");
+const { userSchema } = require("../validation/userSchema");
+
+const scrypt = util.promisify(crypto.scrypt);
+
+//week4
+async function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derivedKey = await scrypt(password, salt, 64);
+
+  return `${salt}:${derivedKey.toString("hex")}`;
+}
+
+async function comparePassword(inputPassword, storedHash) {
+  const [salt, key] = storedHash.split(":");
+  const keyBuffer = Buffer.from(key, "hex");
+  const derivedKey = await scrypt(inputPassword, salt, 64);
+
+  return crypto.timingSafeEqual(keyBuffer, derivedKey);
+}
+
 //export the three given functions register, logon, logoff
+async function register(req, res) {
+  // Make sure Joi receives an object
+  if (!req.body) {
+    req.body = {};
+  }
 
-// function register(req, res) {
-// }
+  // Validate and clean the submitted user information
+  const { error, value } = userSchema.validate(req.body, {
+    abortEarly: false,
+  });
 
-// function logon(req, res) {
-// }
+  // Stop if the submitted information is invalid
+  if (error) {
+    return res.status(400).json({
+      message: error.message,
+    });
+  }
 
-// function logoff(req, res) {
-// }
+  // Check whether this email is already registered
+  const existingUser = global.users.find((user) => {
+    return user.email === value.email;
+  });
 
-// module.exports = {
-//   register,
-//   logon,
-//   logoff,
-// };
+  if (existingUser) {
+    return res.status(400).json({
+      message: "A user with this email already exists.",
+    });
+  }
 
+  // Hash the validated password
+  const hashedPassword = await hashPassword(value.password);
 
-function register(req, res) {
-  // Read name, email, and password from req.body
-  const { name, email, password } = req.body;
-
-  // Create a new user object
+  // Store the hash instead of the original password
   const newUser = {
-    name,
-    email,
-    password,
+    name: value.name,
+    email: value.email,
+    hashedPassword,
   };
 
-  // Add that user to global.users
   global.users.push(newUser);
-
-  // Set global.user_id to that user
   global.user_id = newUser;
 
-  // Return status 201 with the user's name and email
-  res.status(201).json({
-    // Do not return the password
+  return res.status(201).json({
     name: newUser.name,
     email: newUser.email,
   });
 }
 
-function logon (req, res) {
-    //read email and password from req.body
-    const { email, password } = req.body;
+async function logon(req, res) {
+  const { email, password } = req.body;
 
-    // Find a matching user in global.users
-    //create variable, matchingUser and equal that to the global.users.find((user){})
-    const matchingUser = global.users.find((user) => {
-       
-        return user.email === email && user.password === password;  
-    });
-    
+  const matchingUser = global.users.find((user) => {
+    return user.email === email;
+  });
 
-    if(!matchingUser) {
-     return res.sendStatus(401);        //"res.status(401)" does not finish the response, "res.sendStatus(401);" does
-    }
+  const goodCredentials =
+    matchingUser &&
+    (await comparePassword(password, matchingUser.hashedPassword));
 
-     global.user_id = matchingUser;
-     
-    return res.status(200).json({ // Return status 200
-         // If the email and password match, set global.user_id to that user // Return JSON with the user's name and email
-        name: matchingUser.name,
-        email: matchingUser.email,
-    }); 
+  if (!goodCredentials) {
+    return res.sendStatus(401);
+  }
+
+  global.user_id = matchingUser;
+
+  return res.status(200).json({
+    name: matchingUser.name,
+    email: matchingUser.email,
+  });
 }
 
 function logoff (req, res) {
