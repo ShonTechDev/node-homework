@@ -6,6 +6,11 @@ const userRouter = require("./routes/userRoutes");
 const notFound = require("./middleware/not-found");
 const errorHandler = require("./middleware/error-handler");
 
+//week4//requiring the auth middleware and task router
+const authMiddleware = require("./middleware/auth");
+const taskRouter = require("./routes/taskRoutes");
+
+
 //prior week 2
 const app = express();
 
@@ -15,8 +20,10 @@ global.users = [];
 global.tasks = [];
 
 app.use(express.json());
+
 app.use("/api", timeRouter);
 app.use("/api/users", userRouter); //wk3
+app.use("/api/tasks", authMiddleware, taskRouter); //wk4//after the user router is mounted
 
 app.get("/", (req, res) => {
   res.send("Hello, World!");
