@@ -3,6 +3,9 @@ const crypto = require("crypto");
 const util = require("util");
 const { userSchema } = require("../validation/userSchema");
 
+//week5
+const pool = require("../db/pg-pool");
+
 const scrypt = util.promisify(crypto.scrypt);
 
 //week4
@@ -22,7 +25,7 @@ async function comparePassword(inputPassword, storedHash) {
 }
 
 //export the three given functions register, logon, logoff
-async function register(req, res) {
+async function register(req, res, next) {
   // Make sure Joi receives an object
   if (!req.body) {
     req.body = {};
@@ -40,68 +43,77 @@ async function register(req, res) {
     });
   }
 
-  // Check whether this email is already registered
-  const existingUser = global.users.find((user) => {
-    return user.email === value.email;
-  });
+  try {
+    // Hash the validated password
+    value.hashed_password = await hashPassword(value.password);
 
-  if (existingUser) {
-    return res.status(400).json({
-      message: "A user with this email already exists.",
+    // Store the hash instead of the original password
+    const result = await pool.query(
+      `INSERT INTO users (email, name, hashed_password)
+       VALUES ($1, $2, $3)
+       RETURNING id, email, name`,
+      [value.email, value.name, value.hashed_password]
+    );
+
+    global.user_id = result.rows[0].id;
+
+    return res.status(201).json({
+      name: result.rows[0].name,
+      email: result.rows[0].email,
     });
+  } catch (e) {
+    // PostgreSQL error code for a duplicate unique value
+    if (e.code === "23505") {
+      return res.status(400).json({
+        message: "A user with this email already exists.",
+      });
+    }
+
+    return next(e);
   }
-
-  // Hash the validated password
-  const hashedPassword = await hashPassword(value.password);
-
-  // Store the hash instead of the original password
-  const newUser = {
-    name: value.name,
-    email: value.email,
-    hashedPassword,
-  };
-
-  global.users.push(newUser);
-  global.user_id = newUser;
-
-  return res.status(201).json({
-    name: newUser.name,
-    email: newUser.email,
-  });
 }
 
-async function logon(req, res) {
+async function logon(req, res, next) {
   const { email, password } = req.body;
 
-  const matchingUser = global.users.find((user) => {
-    return user.email === email;
-  });
+  try {
+    // Find the registered user by email
+    const result = await pool.query(
+      `SELECT id, email, name, hashed_password
+       FROM users
+       WHERE email = $1`,
+      [email]
+    );
 
-  const goodCredentials =
-    matchingUser &&
-    (await comparePassword(password, matchingUser.hashedPassword));
+    const matchingUser = result.rows[0];
 
-  if (!goodCredentials) {
-    return res.sendStatus(401);
+    const goodCredentials =
+      matchingUser &&
+      (await comparePassword(password, matchingUser.hashed_password));
+
+    if (!goodCredentials) {
+      return res.sendStatus(401);
+    }
+
+    global.user_id = matchingUser.id;
+
+    return res.status(200).json({
+      name: matchingUser.name,
+      email: matchingUser.email,
+    });
+  } catch (e) {
+    return next(e);
   }
-
-  global.user_id = matchingUser;
-
-  return res.status(200).json({
-    name: matchingUser.name,
-    email: matchingUser.email,
-  });
 }
 
-function logoff (req, res) {
-    global.user_id = null;
+function logoff(req, res) {
+  global.user_id = null;
 
-    return res.sendStatus(200);
+  return res.sendStatus(200);
 }
 
 module.exports = {
-    register,
-    logon,
-    logoff,
+  register,
+  logon,
+  logoff,
 };
-
