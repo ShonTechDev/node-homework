@@ -1,7 +1,7 @@
 const express = require("express");
 const timeRouter = require("./routes/timeRoutes");
-//week 5
-const pool = require("./db/pg-pool");
+
+const prisma = require("./db/prisma"); //week 6
 
 //Week 3
 const userRouter = require("./routes/userRoutes");
@@ -37,15 +37,13 @@ app.post("/testpost", (req, res) => {
   });
 });
 
-//week 5
-app.get("/health", async (req, res) => {
+//week 6
+app.get('/health', async (req, res) => {
   try {
-    await pool.query("SELECT 1");
-    res.json({ status: "ok", db: "connected" });
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', db: 'connected' });
   } catch (err) {
-    res.status(500).json({
-      message: `db not connected, error: ${err.message}`,
-    });
+    res.status(500).json({ status: 'error', db: 'not connected', error: err.message });
   }
 });
 
@@ -61,13 +59,16 @@ const server = app.listen(port, () => {
 //closes neon database connections when the server stops
 // & prevents Node from hanging
 
-const shutdown = async () => { 
-  await pool.end();
+const shutdown = async () => {
+
+  await prisma.$disconnect();
+  console.log("Prisma disconnected");
 
   server.close(() => {
     console.log("Server closed.");
   });
 };
+
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
