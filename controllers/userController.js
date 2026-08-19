@@ -4,7 +4,7 @@ const util = require("util");
 const { userSchema } = require("../validation/userSchema");
 
 //week5
-const pool = require("../db/pg-pool");
+const prisma = require("../db/prisma"); //week 6
 
 const scrypt = util.promisify(crypto.scrypt);
 
@@ -43,53 +43,62 @@ async function register(req, res, next) {
     });
   }
 
+  // Hash the validated password
+  value.hashedPassword = await hashPassword(value.password);
+
+  // Store the hash instead of the original password
+  delete value.password;
+
+  let user = null;
+
   try {
-    // Hash the validated password
-    value.hashed_password = await hashPassword(value.password);
-
-    // Store the hash instead of the original password
-    const result = await pool.query(
-      `INSERT INTO users (email, name, hashed_password)
-       VALUES ($1, $2, $3)
-       RETURNING id, email, name`,
-      [value.email, value.name, value.hashed_password]
-    );
-
-    global.user_id = result.rows[0].id;
-
-    return res.status(201).json({
-      name: result.rows[0].name,
-      email: result.rows[0].email,
+    user = await prisma.user.create({
+      data: {
+        name: value.name,
+        email: value.email,
+        hashedPassword: value.hashedPassword,
+      },
+      select: {
+        name: true,
+        email: true,
+        id: true,
+      },
     });
-  } catch (e) {
-    // PostgreSQL error code for a duplicate unique value
-    if (e.code === "23505") {
+  } catch (err) {
+    if (
+      err.name === "PrismaClientKnownRequestError" &&
+      err.code === "P2002"
+    ) {
       return res.status(400).json({
         message: "A user with this email already exists.",
       });
+    } else {
+      return next(err);
     }
-
-    return next(e);
   }
+
+  global.user_id = user.id;
+
+  return res.status(201).json({
+    name: user.name,
+    email: user.email,
+  });
 }
 
 async function logon(req, res, next) {
-  const { email, password } = req.body;
+  let { email, password } = req.body;
 
   try {
     // Find the registered user by email
-    const result = await pool.query(
-      `SELECT id, email, name, hashed_password
-       FROM users
-       WHERE email = $1`,
-      [email]
-    );
+    email = email.toLowerCase();
 
-    const matchingUser = result.rows[0];
+    const matchingUser = await prisma.user.findUnique({
+      where: { email },
+    });
 
     const goodCredentials =
       matchingUser &&
-      (await comparePassword(password, matchingUser.hashed_password));
+      (await comparePassword(password, matchingUser.hashedPassword));
 
     if (!goodCredentials) {
       return res.sendStatus(401);
