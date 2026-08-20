@@ -14,6 +14,9 @@ const errorHandler = require("./middleware/error-handler");
 const authMiddleware = require("./middleware/auth");
 const taskRouter = require("./routes/taskRoutes");
 
+//week 7
+const analyticsRoutes = require("./routes/analyticsRoutes");
+
 
 //prior week 2
 const app = express();
@@ -26,6 +29,7 @@ app.use(express.json());
 app.use("/api", timeRouter);
 app.use("/api/users", userRouter); //wk3
 app.use("/api/tasks", authMiddleware, taskRouter); //wk4//after the user router is mounted
+app.use("/api/analytics", authMiddleware, analyticsRoutes); //week 7
 
 app.get("/", (req, res) => {
   res.send("Hello, World!");
