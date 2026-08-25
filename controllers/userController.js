@@ -6,7 +6,34 @@ const { userSchema } = require("../validation/userSchema");
 //week5
 const prisma = require("../db/prisma"); //week 6
 
+//week8
+const { randomUUID } = require("crypto");
+const jwt = require("jsonwebtoken");
+
 const scrypt = util.promisify(crypto.scrypt);
+
+//week8
+const cookieFlags = (req) => {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production", // only when HTTPS is available
+    sameSite: "Strict",
+  };
+};
+
+const setJwtCookie = (req, res, user) => {
+  // Sign JWT
+  const payload = { id: user.id, csrfToken: randomUUID() };
+  const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" }); // 1 hour expiration
+
+  // Set cookie
+  res.cookie("jwt", token, {
+    ...cookieFlags(req),
+    maxAge: 3600000,
+  });
+
+  return payload.csrfToken;
+};
 
 //week4
 async function hashPassword(password) {
@@ -92,7 +119,7 @@ async function register(req, res, next) {
         data: welcomeTaskData,
       });
 
-      // Fetch the created tasks to return them
+      // Fetch the created tasks
       const welcomeTasks = await tx.task.findMany({
         where: {
           userId: newUser.id,
@@ -115,17 +142,15 @@ async function register(req, res, next) {
       };
     });
 
-    // Store the user ID globally for session management
-    global.user_id = result.user.id;
+    // Create the JWT and store it in the cookie
+    const csrfToken = setJwtCookie(req, res, result.user);
 
-    // Send response with status 201
-    res.status(201);
-    res.json({
+    return res.status(201).json({
       user: result.user,
       welcomeTasks: result.welcomeTasks,
       transactionStatus: "success",
+      csrfToken,
     });
-    return;
   } catch (err) {
     if (err.code === "P2002") {
       return res.status(400).json({
@@ -162,11 +187,13 @@ async function logon(req, res, next) {
       return res.sendStatus(401);
     }
 
-    global.user_id = matchingUser.id;
+    // Create the JWT and store it in the cookie
+    const csrfToken = setJwtCookie(req, res, matchingUser);
 
     return res.status(200).json({
       name: matchingUser.name,
       email: matchingUser.email,
+      csrfToken,
     });
   } catch (e) {
     return next(e);
@@ -174,7 +201,7 @@ async function logon(req, res, next) {
 }
 
 function logoff(req, res) {
-  global.user_id = null;
+  res.clearCookie("jwt", cookieFlags(req));
 
   return res.sendStatus(200);
 }

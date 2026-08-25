@@ -3,8 +3,12 @@
 const express = require("express");
 
 const taskController = require("../controllers/taskController");
+const jwtMiddleware = require("../middleware/jwtMiddleware");
 
 const router = express.Router();
+
+// Protect all task routes with JWT authentication
+router.use(jwtMiddleware);
 
 //relative to /api/tasks
 
