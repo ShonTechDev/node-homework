@@ -10,26 +10,51 @@ const userRouter = require("./routes/userRoutes");
 const notFound = require("./middleware/not-found");
 const errorHandler = require("./middleware/error-handler");
 
-//week4//requiring the auth middleware and task router
-const authMiddleware = require("./middleware/auth");
+//task routes
 const taskRouter = require("./routes/taskRoutes");
 
 //week 7
 const analyticsRoutes = require("./routes/analyticsRoutes");
 
+//week 8
+const jwtMiddleware = require("./middleware/jwtMiddleware");
+const cookieParser = require("cookie-parser");
+const helmet = require("helmet");
+const { xss } = require("express-xss-sanitizer");
+const rateLimiter = require("express-rate-limit");
 
 //prior week 2
 const app = express();
 
-//week 3
-global.user_id = null; //tracks logged in user
+//week 8
+app.set("trust proxy", 1);
 
+// Rate limiting comes before any other app.use()
+app.use(
+  rateLimiter({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+  }),
+);
+
+// Security headers
+app.use(helmet());
+
+// Body and cookie parsers
 app.use(express.json());
+app.use(cookieParser());
+
+// XSS protection must come after the parsers
+app.use(xss());
 
 app.use("/api", timeRouter);
 app.use("/api/users", userRouter); //wk3
-app.use("/api/tasks", authMiddleware, taskRouter); //wk4//after the user router is mounted
-app.use("/api/analytics", authMiddleware, analyticsRoutes); //week 7
+
+// JWT protection is inside taskRoutes
+app.use("/api/tasks", taskRouter);
+
+// Preserve authentication on Week 7 analytics routes
+app.use("/api/analytics", jwtMiddleware, analyticsRoutes);
 
 app.get("/", (req, res) => {
   res.send("Hello, World!");
@@ -42,12 +67,16 @@ app.post("/testpost", (req, res) => {
 });
 
 //week 6
-app.get('/health', async (req, res) => {
+app.get("/health", async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
-    res.json({ status: 'ok', db: 'connected' });
+    res.json({ status: "ok", db: "connected" });
   } catch (err) {
-    res.status(500).json({ status: 'error', db: 'not connected', error: err.message });
+    res.status(500).json({
+      status: "error",
+      db: "not connected",
+      error: err.message,
+    });
   }
 });
 
@@ -64,7 +93,6 @@ const server = app.listen(port, () => {
 // & prevents Node from hanging
 
 const shutdown = async () => {
-
   await prisma.$disconnect();
   console.log("Prisma disconnected");
 
@@ -72,7 +100,6 @@ const shutdown = async () => {
     console.log("Server closed.");
   });
 };
-
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
