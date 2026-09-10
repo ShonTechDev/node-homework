@@ -32,7 +32,10 @@ describe("register a user", () => {
       password: "Pa$$word20",
     };
 
-    saveRes = await agent.post("/api/users/register").send(newUser);
+    saveRes = await agent
+      .post("/api/users/register")
+      .set("X-Recaptcha-Test", process.env.RECAPTCHA_BYPASS) //week10 stretch goal
+      .send(newUser);
 
     expect(saveRes.status).toBe(201);
   });
