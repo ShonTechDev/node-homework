@@ -9,6 +9,7 @@ const prisma = require("../db/prisma"); //week 6
 //week8
 const { randomUUID } = require("crypto");
 const jwt = require("jsonwebtoken");
+const { StatusCodes } = require("http-status-codes");
 
 const scrypt = util.promisify(crypto.scrypt);
 
@@ -56,6 +57,40 @@ async function register(req, res, next) {
   // Make sure Joi receives an object
   if (!req.body) {
     req.body = {};
+  }
+
+  let isPerson = false;
+  if (req.body.recaptchaToken) {
+    const token = req.body.recaptchaToken;
+    const params = new URLSearchParams();
+    params.append("secret", process.env.RECAPTCHA_SECRET);
+    params.append("response", token);
+    params.append("remoteip", req.ip);
+    const response = await fetch(
+      // might throw an error that would cause a 500 from the error handler
+      "https://www.google.com/recaptcha/api/siteverify",
+      {
+        method: "POST",
+        body: params.toString(),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      },
+    );
+    const data = await response.json();
+    if (data.success) isPerson = true;
+    delete req.body.recaptchaToken;
+  } else if (
+    process.env.RECAPTCHA_BYPASS &&
+    req.get("X-Recaptcha-Test") === process.env.RECAPTCHA_BYPASS
+  ) {
+    // might be a test environment
+    isPerson = true;
+  }
+  if (!isPerson) {
+    return res
+      .status(StatusCodes.BAD_REQUEST)
+      .json({ message: "Bot verification failed. Please complete the reCAPTCHA." });
   }
 
   // Validate and clean the submitted user information
