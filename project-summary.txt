@@ -1,1 +1,24 @@
 https://node-homework-g51m.onrender.com
+
+Additional Back-End Feature: Updating Many Records with a Single Operation
+
+Method: PATCH
+Path: /api/tasks
+Query Parameter: isCompleted=true or isCompleted=false
+
+Example Request:
+PATCH /api/tasks?isCompleted=false
+
+Request Body:
+{
+  "isCompleted": true
+}
+
+Description:
+This endpoint uses Prisma updateMany() to update all tasks belonging to the authenticated user that match the isCompleted query condition. For example, the request above changes all of the user's incomplete tasks to completed tasks in a single operation.
+
+Example Response:
+{
+  "message": "Tasks updated successfully.",
+  "tasksUpdated": 3
+}

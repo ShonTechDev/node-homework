@@ -18,6 +18,8 @@ router.get("/", taskController.index);
 
 router.post("/bulk", taskController.bulkCreate);
 
+router.patch("/", taskController.updateManyTasks);
+
 router.get("/:id", taskController.show);
 
 router.patch("/:id", taskController.update);
