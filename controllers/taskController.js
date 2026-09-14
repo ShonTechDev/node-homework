@@ -221,6 +221,50 @@ async function update(req, res, next) {
   }
 }
 
+// Update many tasks with a single operation
+async function updateManyTasks(req, res, next) {
+  const query = req.query || {};
+
+  if (query.isCompleted !== "true" && query.isCompleted !== "false") {
+    return res.status(400).json({
+      message: "isCompleted query parameter must be true or false.",
+    });
+  }
+
+  if (!req.body) {
+    req.body = {};
+  }
+
+  const { error, value } = patchTaskSchema.validate(req.body, {
+    abortEarly: false,
+  });
+
+  if (error) {
+    return res.status(400).json({
+      message: error.message,
+    });
+  }
+
+  const isCompleted = query.isCompleted === "true";
+
+  try {
+    const result = await prisma.task.updateMany({
+      where: {
+        userId: req.user.id,
+        isCompleted,
+      },
+      data: value,
+    });
+
+    return res.status(200).json({
+      message: "Tasks updated successfully.",
+      tasksUpdated: result.count,
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 async function deleteTask(req, res, next) {
   const taskId = parseInt(req.params?.id);
 
@@ -312,6 +356,7 @@ module.exports = {
   index,
   show,
   update,
+  updateManyTasks,
   deleteTask,
   bulkCreate,
 };
